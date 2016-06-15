@@ -21,7 +21,7 @@
  ***************************************************************************/
 """
 from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, QObject, SIGNAL
-from PyQt4.QtGui import QAction, QIcon, QMessageBox
+from PyQt4.QtGui import QAction, QIcon, QMessageBox, QApplication
 from qgis.core import QgsCoordinateTransform, QgsCoordinateReferenceSystem
 # Initialize Qt resources from file resources.py
 import resources
@@ -29,6 +29,7 @@ import resources
 from geometry_exporter_dialog import GeometryExporterDialog
 from osgeo import gdal, ogr, osr
 import os.path
+import json
 
 
 class GeometryExporter:
@@ -85,18 +86,17 @@ class GeometryExporter:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('GeometryExporter', message)
 
-
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -162,7 +162,7 @@ class GeometryExporter:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/GeometryExporter/icon.png'
+        icon_path = ':/plugins/GeometryExporter/icons/icon.png'
         self.add_action(
             icon_path,
             text=self.tr(u'Geometry Exporter'),
@@ -179,6 +179,7 @@ class GeometryExporter:
         QObject.connect(self.dlg.cmbFormat, SIGNAL("currentIndexChanged(int)"), self.populate)
         QObject.connect(self.dlg.cmbConversion, SIGNAL("currentIndexChanged(int)"), self.populate)
         QObject.connect(self.dlg.proj, SIGNAL("crsChanged(QgsCoordinateReferenceSystem)"), self.populate)
+        QObject.connect(self.dlg.btnCopy, SIGNAL("clicked()"), self.copytoclipboard)
 
 
     def unload(self):
@@ -188,7 +189,7 @@ class GeometryExporter:
                 self.tr(u'&Geometry Exporter'),
                 action)
             self.iface.removeToolBarIcon(action)
-        # remove the toolbar
+            # remove the toolbar
         del self.toolbar
 
 
@@ -215,7 +216,6 @@ class GeometryExporter:
             self.qgscrs = layer.crs()
             self.populate()
 
-
     #  http://gis.stackexchange.com/questions/90205/equivalent-function-to-shapelys-envelope-in-ogr
     def compute_envelope(self, geom):
         (minX, maxX, minY, maxY) = geom.GetEnvelope()
@@ -233,6 +233,11 @@ class GeometryExporter:
         poly_envelope.AddGeometry(ring)
         return poly_envelope
 
+    def copytoclipboard(self):
+        QApplication.clipboard().setText(
+            self.dlg.txtGeometryExport.toPlainText()
+        )
+
     def populate(self):
 
         if self.feature:
@@ -246,7 +251,6 @@ class GeometryExporter:
 
             # transformation
             if qgscrs.postgisSrid() > 0:
-
                 # Transformation using OGR
                 # https://pcjericks.github.io/py-gdalogr-cookbook/projection.html#reproject-a-geometry
                 source = osr.SpatialReference()
@@ -270,9 +274,9 @@ class GeometryExporter:
 
             export = ''
             if self.dlg.cmbFormat.currentText() == 'GML 2':
-                export = geom.ExportToGML(options = ['FORMAT=GML2'])
+                export = geom.ExportToGML(options=['FORMAT=GML2'])
             elif self.dlg.cmbFormat.currentText() == 'GML 3':
-                export = geom.ExportToGML(options = ['FORMAT=GML3'])
+                export = geom.ExportToGML(options=['FORMAT=GML3'])
             elif self.dlg.cmbFormat.currentText() == 'KML':
                 export = geom.ExportToKML()
             elif self.dlg.cmbFormat.currentText() == 'GeoJSON':
@@ -283,6 +287,12 @@ class GeometryExporter:
                     export += "EPSG:"
                     export += str(qgscrs.postgisSrid()) + ";"
                 export += geom.ExportToWkt()
+            elif self.dlg.cmbFormat.currentText() == 'CSV':
+                coordinates = json.loads(geom.ExportToJson())
+                number = 0
+                for l in coordinates['coordinates'][0]:
+                    number += 1
+                    export += str(number) + ',' + json.dumps(l[0]) + ',' + json.dumps(l[1]) + '\r\n'
             else:
                 export = geom.ExportToWkt()
             self.dlg.txtGeometryExport.setText(export)

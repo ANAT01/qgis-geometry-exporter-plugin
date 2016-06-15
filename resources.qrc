@@ -1,5 +1,6 @@
 <RCC>
-    <qresource prefix="/plugins/GeometryExporter" >
-        <file>icon.png</file>
-    </qresource>
+  <qresource prefix="/plugins/GeometryExporter">
+    <file>icons/copy.png</file>
+    <file>icons/icon.png</file>
+  </qresource>
 </RCC>
